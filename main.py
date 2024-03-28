@@ -6,8 +6,8 @@ import glob
 import os
 
 lookup_hp = {
-    'LightGCN': ['factors', 'n_layers'],
-    'NGCF': ['factors', 'n_layers']
+    'LightGCN': ['factors', 'n_layers', 'lr'],
+    'NGCF': ['factors', 'n_layers', 'lr']
 }
 
 if __name__ == '__main__':
@@ -26,7 +26,7 @@ if __name__ == '__main__':
         obj2 = 'APLT'
         opt2 = 'max'
     """
-    model_name = 'NGCF'
+    model_name = 'LightGCN'
     dataset = 'amazon_books'
     dir = os.listdir(f'data/{dataset}/{model_name}')
     obj1 = 'nDCG'
@@ -72,6 +72,10 @@ if __name__ == '__main__':
         hv_c = hv / c
         print(ms, sp, er, hv, c, hv_c)
         results.append([element[4:-4], ms, sp, er, hv, c, hv_c])
+        print(obj.get_statistics())
+        print(obj.get_statistics_per_hp())
+        print(obj.get_statistics(False))
+        # print(obj.get_nondominated_per_hp())
     res_df = pd.DataFrame(results, columns=['model', 'MS', 'SP', 'ER', 'HV', 'C', 'HV/C'])
     print('')
     pass

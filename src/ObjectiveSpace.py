@@ -7,8 +7,8 @@ import shapely.geometry as geom
 np.random.seed(7)
 
 lookup_hp = {
-    'LightGCN': ['factors', 'n_layers'],
-    'NGCF': ['factors', 'n_layers']
+    'LightGCN': ['factors', 'n_layers', 'lr'],
+    'NGCF': ['factors', 'n_layers', 'lr']
 }
 
 class ObjectivesSpace:
@@ -104,6 +104,98 @@ class ObjectivesSpace:
             plt.show()
         else:
             print("Cannot print >3-dimensional objective funtion space")
+
+    def _get_distances(self, line_pts, pts):
+        non_dom_line = line_pts.copy()
+        all_pts = pts.copy()
+        # non_dom = non_dom_pts.copy()
+        # dom = dom_pts.copy()
+        # pts = np.concatenate((non_dom, dom))
+        # if normalization:
+        #    for i in range(0, pts.shape[1]):
+        #        non_dom[:, i] = (non_dom[:, i] - pts[:, i].min()) / (pts[:, i].max() - pts[:, i].min())
+        #        dom[:, i] = (dom[:, i] - pts[:, i].min()) / (pts[:, i].max() - pts[:, i].min())
+        #        non_dom_line[:, i] = (non_dom_line[:, i] - pts[:, i].min()) / (pts[:, i].max() - pts[:, i].min())
+
+        distances = {}
+        line = geom.LineString(non_dom_line[:, :][non_dom_line[:, 1].argsort()])
+
+        # line = geom.LineString(self.points[0][:, 1:][self.points[0][:, 2].argsort()])
+        i = 0
+        for point in all_pts:
+            distances[(i, tuple(point))] = geom.Point(point).distance(line)
+            i += 1
+        # for point in np.concatenate((self.points[1][:, 1:], self.points[0][:, 1:]), axis=0):
+        #     distances[(i, tuple(point))] = geom.Point(point).distance(line)
+        #     i += 1
+        return distances
+
+    def _minmax_normalization(self, pts, line_pts, all_pts):
+        non_dom_line = line_pts.copy()
+        all_pts = all_pts.copy()
+        pts = pts.copy()
+        # non_dom = non_dom.copy()
+        # dom = dom.copy()
+        # all_pts = all_pts.copy()
+        # pts = np.concatenate((non_dom, dom))
+        for i in range(0, all_pts.shape[1]):
+            pts[:, i] = (pts[:, i] - all_pts[:, i].min()) / (all_pts[:, i].max() - all_pts[:, i].min())
+            # non_dom[:, i] = (non_dom[:, i] - all_pts[:, i].min()) / (all_pts[:, i].max() - all_pts[:, i].min())
+            # dom[:, i] = (dom[:, i] - all_pts[:, i].min()) / (all_pts[:, i].max() - all_pts[:, i].min())
+            non_dom_line[:, i] = (non_dom_line[:, i] - all_pts[:, i].min()) / (all_pts[:, i].max() - all_pts[:, i].min())
+        return non_dom_line, pts
+
+    def mean_std(self, distances):
+        mean = np.fromiter(distances.values(), dtype=float).mean()
+        variance = ((np.fromiter(distances.values(), dtype=float) - mean) ** 2).sum() / (
+                np.fromiter(distances.values(), dtype=float).shape[0] - 1)
+        standard_deviation = variance ** (1 / 2)
+        return standard_deviation, mean
+
+    def get_statistics(self, normalization=True):
+        non_dom, dom = self.points[0][:, 1:].astype('float'), self.points[1][:, 1:].astype('float')
+        pts = np.concatenate((self.points[0][:, 1:].astype('float'), self.points[1][:, 1:].astype('float')))
+        if normalization:
+            line_pts, all_pts = self._minmax_normalization(pts, non_dom, np.concatenate((non_dom, dom)))
+            distances = self._get_distances(line_pts, all_pts)
+        else:
+            distances = self._get_distances(non_dom, pts)
+        # distances = self._get_distances(non_dom, non_dom, dom)
+        return self.mean_std(distances)
+
+        # mean = np.fromiter(distances.values(), dtype=float).mean()
+        # variance = ((np.fromiter(distances.values(), dtype=float) - mean) ** 2).sum() / (
+        #             np.fromiter(distances.values(), dtype=float).shape[0] - 1)
+        # standard_deviation = variance ** (1 / 2)
+        # return standard_deviation, mean
+
+    def get_statistics_per_hp(self, normalization=True):
+        non_dom, dom = self.points[0][:, 1:].astype('float'), self.points[1][:, 1:].astype('float')
+        non_dom_hp, dom_hp = self.get_nondominated_per_hp(), self.get_dominated_per_hp()
+        hps = lookup_hp[self.model_name]
+        stats_hp = {}
+        for hp in hps:
+            stats_hp[hp] = {}
+            values = set()
+            for el in dom_hp[hp].keys():
+                values.add(el)
+            for el in non_dom_hp[hp].keys():
+                values.add(el)
+            for value in values:
+                try:
+                    pts = np.concatenate((non_dom_hp[hp][value].values[:, 1:3].astype('float'), dom_hp[hp][value].values[:, 1:3].astype('float')))
+                except KeyError:
+                    try:
+                        pts = non_dom_hp[hp][value].values[:, 1:3].astype('float')
+                    except KeyError:
+                        pts = dom_hp[hp][value].values[:, 1:3].astype('float')
+                if normalization:
+                    line_pts, all_pts = self._minmax_normalization(pts, non_dom, np.concatenate((non_dom, dom)))
+                    distances = self._get_distances(line_pts, all_pts)
+                else:
+                    distances = self._get_distances(non_dom, pts)
+                stats_hp[hp][value] = self.mean_std(distances)
+        return stats_hp
 
     """
         @For: Spread
